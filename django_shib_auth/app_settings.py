@@ -1,7 +1,8 @@
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 
-SHIB_IDP_ATTRIB_NAME = getattr(settings, 'SHIB_IDP_ATTRIB_NAME')
-SHIB_AUTHORIZED_IDPS = getattr(settings, 'SHIB_AUTHORIZED_IDPS')
+SHIB_IDP_ATTRIB_NAME = getattr(settings, 'SHIB_IDP_ATTRIB_NAME', None)
+SHIB_AUTHORIZED_IDPS = getattr(settings, 'SHIB_AUTHORIZED_IDPS', None)
 
 
 # Name of the shib header that contains the username
@@ -19,7 +20,9 @@ SHIB_ATTRIBUTE_MAP = getattr(settings, 'SHIB_ATTRIBUTE_MAP', {
 SHIB_MOCK = getattr(settings, 'SHIB_MOCK', False)
 
 # A dictionary of `SHIB_HEADER: VALUE` to inject
-SHIB_MOCK_ATTRIBUTES = getattr(settings, 'SHIB_MOCK_ATTRIBUTES')
+SHIB_MOCK_ATTRIBUTES = getattr(settings, 'SHIB_MOCK_ATTRIBUTES', None)
+if SHIB_MOCK and not SHIB_MOCK_ATTRIBUTES:
+	raise ImproperlyConfigured("You requested to inject mock headers but then didn't give anything to inject")
 
 # This list of attributes will map to Django permission groups
 SHIB_GROUP_ATTRIBUTES = getattr(settings, 'SHIB_GROUP_ATTRIBUTES', {})
