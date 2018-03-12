@@ -14,7 +14,7 @@ class ShibIgnoredGroupsAdminMixin:
 		fieldsets = copy.deepcopy(super().get_fieldsets(request, obj))
 
 		found = False
-		for opts in fieldsets.values():
+		for _, opts in fieldsets:
 			fields = opts.get('fields', None)
 			if not fields or 'groups' not in fields:
 				continue
