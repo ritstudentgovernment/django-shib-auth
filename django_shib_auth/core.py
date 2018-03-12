@@ -153,11 +153,20 @@ class ShibAuthCore:
 		for attr, attr_config in SHIB_GROUP_ATTRIBUTES.items():
 			delimiter = attr_config.get('delimiter', ';')
 			mappings = attr_config['mappings']
+			whitelist = attr_config['whitelist']
+			blacklist = attr_config['blacklist']
 
-			parsed_groups = (g for g in re.split(delimiter, request.META.get(attr, '')) if g in mappings)
-			django_groups = (mappings[g] for g in parsed_groups)
+			parsed_groups = filter(None, re.split(delimiter, request.META.get(attr, '')))
 
-			remote_groups = remote_groups.union(django_groups)
+			if whitelist:
+				parsed_groups = filter(lambda g: g in whitelist, parsed_groups)
+			elif blacklist:
+				parsed_groups = filter(lambda g: g not in blacklist, parsed_groups)
+
+			if mappings:
+				parsed_groups = map(lambda g: mappings.get(g, g))
+
+			remote_groups = remote_groups.union(parsed_groups)
 
 		logger.info("Groups configured for IdP '%s': locally: %s, remotely: %s",
 			idp, local_groups, remote_groups
