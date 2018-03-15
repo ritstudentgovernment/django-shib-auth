@@ -40,9 +40,9 @@ class ShibAuthCore:
 	def login(self, request):
 		ensure_auth_middleware(request)
 
-		idp, username, shib_meta = self._fetch_headers(request)
+		idp, username, shib_attrs = self._fetch_headers(request)
 
-		new_user = auth.authenticate(request, username=username, shib_meta=shib_meta)
+		new_user = auth.authenticate(request, username=username, shib_attrs=shib_attrs)
 
 		if not new_user:
 			# No one found... oops
@@ -62,7 +62,7 @@ class ShibAuthCore:
 		# We now have a valid user instance
 		# Update its attributes with our shib meta to capture
 		# any values that aren't on our model
-		request.user.__dict__.update(shib_meta)
+		request.user.__dict__.update(shib_attrs)
 		self._adjust_groups(request, request.user, idp)
 		request.user.save()
 
@@ -72,13 +72,15 @@ class ShibAuthCore:
 			logger.info('Overwriting shib headers with %s', SHIB_MOCK_ATTRIBUTES)
 			request.META.update(SHIB_MOCK_ATTRIBUTES)
 
-		idp = request.META.get(SHIB_IDP_ATTRIB_NAME, None)
-		if not idp:
-			raise ImproperlyConfigured("IdP header missing. Is this path protected by Shib?")
+		idp = None
+		if SHIB_IDP_ATTRIB_NAME is not None:
+			idp = request.META.get(SHIB_IDP_ATTRIB_NAME, None)
+			if not idp:
+				raise ImproperlyConfigured("IdP header missing. Is this path protected by Shib?")
 
-		if idp not in SHIB_AUTHORIZED_IDPS:
-			logger.info("Unauthorized IdP: '%s'", idp)
-			raise PermissionDenied("Unauthorized IdP: {}".format(idp))
+			if SHIB_AUTHORIZED_IDPS is not None and idp not in SHIB_AUTHORIZED_IDPS:
+				logger.info("Unauthorized IdP: '%s'", idp)
+				raise PermissionDenied("Unauthorized IdP: {}".format(idp))
 
 		username = request.META.get(SHIB_USERNAME_ATTRIB_NAME, None)
 		# If we got None or an empty value, something went wrong.
@@ -89,15 +91,15 @@ class ShibAuthCore:
 				)
 
 		# Make sure we have all required Shibboleth elements before proceeding.
-		shib_meta, missing = self.parse_attributes(request)
-		request.session['shib'] = shib_meta
+		shib_attrs, missing = self.parse_attributes(request)
+		request.session['shib'] = shib_attrs
 
 		if len(missing) != 0:
 			raise ShibbolethValidationError(
 				"All required Shibboleth elements not found. Missing: {}".format(missing)
 			)
 
-		return idp, username, shib_meta
+		return idp, username, shib_attrs
 
 	def _adjust_groups(self, request, user, idp):
 		ignored_groups = getattr(user, 'shib_ignored_groups', None)
@@ -152,9 +154,9 @@ class ShibAuthCore:
 		remote_groups = set()
 		for attr, attr_config in SHIB_GROUP_ATTRIBUTES.items():
 			delimiter = attr_config.get('delimiter', ';')
-			mappings = attr_config['mappings']
-			whitelist = attr_config['whitelist']
-			blacklist = attr_config['blacklist']
+			mappings = attr_config.get('mappings', None)
+			whitelist = attr_config.get('whitelist', None)
+			blacklist = attr_config.get('blacklist', None)
 
 			parsed_groups = filter(None, re.split(delimiter, request.META.get(attr, '')))
 
@@ -164,7 +166,7 @@ class ShibAuthCore:
 				parsed_groups = filter(lambda g: g not in blacklist, parsed_groups)
 
 			if mappings:
-				parsed_groups = map(lambda g: mappings.get(g, g))
+				parsed_groups = map(lambda g: mappings.get(g, g), parsed_groups)
 
 			remote_groups = remote_groups.union(parsed_groups)
 
