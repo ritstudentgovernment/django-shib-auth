@@ -72,7 +72,7 @@ class ShibAuthCore:
 			logger.info('Overwriting shib headers with %s', SHIB_MOCK_ATTRIBUTES)
 			request.META.update(SHIB_MOCK_ATTRIBUTES)
 
-		idp = request.meta.get(SHIB_IDP_ATTRIB_NAME, None)
+		idp = request.META.get(SHIB_IDP_ATTRIB_NAME, None)
 		if not idp:
 			raise ImproperlyConfigured("IdP header missing. Is this path protected by Shib?")
 
