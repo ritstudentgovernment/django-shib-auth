@@ -105,7 +105,7 @@ class ParseAttributesTestCase(TestCase):
 
 		got, missing = ShibAuthCore(shib_attribute_map={
 			'uid': (True, 'username'),
-		}).parse_attributes(request)
+		})._parse_attributes(request)
 
 		self.assertDictEqual(got, {
 			'username': '123'
@@ -122,7 +122,7 @@ class ParseAttributesTestCase(TestCase):
 		got, missing = ShibAuthCore(shib_attribute_map={
 			'uid': (True, 'username'),
 			'required': (True, 'x')
-		}).parse_attributes(request)
+		})._parse_attributes(request)
 
 		self.assertDictEqual(got, {
 			'username': '123'
@@ -139,7 +139,7 @@ class ParseAttributesTestCase(TestCase):
 		got, missing = ShibAuthCore(shib_attribute_map={
 			'uid': (True, 'username'),
 			'required': (False, 'x')
-		}).parse_attributes(request)
+		})._parse_attributes(request)
 
 		self.assertDictEqual(got, {
 			'username': '123'
@@ -155,7 +155,7 @@ class ParseAttributesTestCase(TestCase):
 
 		got, missing = ShibAuthCore(shib_attribute_map={
 			'uid': (True, 'username'),
-		}).parse_attributes(request)
+		})._parse_attributes(request)
 
 		self.assertDictEqual(got, {
 			'username': '123'

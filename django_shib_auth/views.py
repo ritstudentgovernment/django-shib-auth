@@ -1,9 +1,9 @@
 from django.shortcuts import render
 from django.views import View
 
-from .core import ShibAuthCore
+from .core import ShibSessionAuthCore
 
-class LogoutView(ShibAuthCore, View):
+class LogoutView(ShibSessionAuthCore, View):
 	"""
 	Defines a view that will log the user out of the current session ONLY. Does nothing to Shib
 	"""
@@ -13,7 +13,7 @@ class LogoutView(ShibAuthCore, View):
 		return render(request, 'shib_auth/logged_out.html')
 
 
-class LoginView(ShibAuthCore, View):
+class LoginView(ShibSessionAuthCore, View):
 	"""
 	Defines a view that will read shib headers and use them to create/log in a user.
 	This MUST be protected by Shib or anyone could spoof anything.

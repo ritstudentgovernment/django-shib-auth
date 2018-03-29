@@ -3,11 +3,11 @@ import logging
 from django.contrib.auth.middleware import RemoteUserMiddleware
 from django.core.exceptions import PermissionDenied
 
-from .core import ShibAuthCore
+from .core import ShibSessionAuthCore
 
 logger = logging.getLogger(__name__)
 
-class ShibbolethRemoteUserMiddleware(ShibAuthCore, RemoteUserMiddleware):
+class ShibbolethRemoteUserMiddleware(ShibSessionAuthCore, RemoteUserMiddleware):
 	"""
 	Authentication Middleware for use with Shibboleth.
 	Will attempt to authenticate the user on EVERY request
