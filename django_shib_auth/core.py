@@ -1,7 +1,7 @@
 import logging, re
 
 from django.conf import settings
-from django.contrib import auth
+from django.contrib import auth as django_auth
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 
 from .app_settings import (
@@ -20,29 +20,51 @@ logger = logging.getLogger(__name__)
 class ShibbolethValidationError(Exception):
 	pass
 
-def ensure_auth_middleware(request):
-	# AuthenticationMiddleware is required so that request.user exists.
-	if not hasattr(request, 'user'):
-		raise ImproperlyConfigured(
-			"The Shib auth functions require the "
-			"authentication middleware to be installed. Edit your "
-			"MIDDLEWARE_CLASSES setting to insert"
-			"'django.contrib.auth.middleware.AuthenticationMiddleware'."
-		)
-
 class ShibAuthCore:
-	def logout(self, request):
-		ensure_auth_middleware(request)
+	def __init__(self,
+	             shib_idp_attrib_name = SHIB_IDP_ATTRIB_NAME,
+	             shib_authorized_idps = SHIB_AUTHORIZED_IDPS,
+	             shib_attribute_map = SHIB_ATTRIBUTE_MAP,
+	             shib_mock = SHIB_MOCK,
+	             shib_mock_attributes = SHIB_MOCK_ATTRIBUTES,
+	             shib_username_attrib_name = SHIB_USERNAME_ATTRIB_NAME,
+	             shib_group_attributes = SHIB_GROUP_ATTRIBUTES,
+	             shib_groups_by_idp = SHIB_GROUPS_BY_IDP,
+				 auth=django_auth):
+		self.shib_idp_attrib_name = shib_idp_attrib_name
+		self.shib_authorized_idps = shib_authorized_idps
+		self.shib_attribute_map = shib_attribute_map
+		self.shib_mock = shib_mock
+		self.shib_mock_attributes = shib_mock_attributes
+		self.shib_username_attrib_name = shib_username_attrib_name
+		self.shib_group_attributes = shib_group_attributes
+		self.shib_groups_by_idp = shib_groups_by_idp
+		self.auth = auth
+	#end init
 
-		auth.logout(request)
+	@staticmethod
+	def ensure_auth_middleware(request):
+		# AuthenticationMiddleware is required so that request.user exists.
+		if not hasattr(request, 'user'):
+			raise ImproperlyConfigured(
+				"The Shib auth functions require the "
+				"authentication middleware to be installed. Edit your "
+				"MIDDLEWARE_CLASSES setting to insert"
+				"'django.contrib.auth.middleware.AuthenticationMiddleware'."
+			)
+
+	def logout(self, request):
+		self.ensure_auth_middleware(request)
+
+		self.auth.logout(request)
 		request.session.flush() # Force the session to be discarded
 
 	def login(self, request):
-		ensure_auth_middleware(request)
+		self.ensure_auth_middleware(request)
 
 		idp, username, shib_attrs = self._fetch_headers(request)
 
-		new_user = auth.authenticate(request, username=username, shib_attrs=shib_attrs)
+		new_user = self.auth.authenticate(request, username=username, shib_attrs=shib_attrs)
 
 		if not new_user:
 			# No one found... oops
@@ -57,7 +79,7 @@ class ShibAuthCore:
 		# User is valid.  Set request.user and persist user in the session
 		# by logging the user in.
 		if request.user.is_anonymous:
-			auth.login(request, new_user)
+			self.auth.login(request, new_user)
 
 		# We now have a valid user instance
 		# Update its attributes with our shib meta to capture
@@ -68,26 +90,26 @@ class ShibAuthCore:
 
 	def _fetch_headers(self, request):
 		# inject shib attributes
-		if settings.DEBUG and SHIB_MOCK:
-			logger.info('Overwriting shib headers with %s', SHIB_MOCK_ATTRIBUTES)
-			request.META.update(SHIB_MOCK_ATTRIBUTES)
+		if settings.DEBUG and self.shib_mock:
+			logger.info('Overwriting shib headers with %s', self.shib_mock_attributes)
+			request.META.update(self.shib_mock_attributes)
 
 		idp = None
-		if SHIB_IDP_ATTRIB_NAME is not None:
-			idp = request.META.get(SHIB_IDP_ATTRIB_NAME, None)
+		if self.shib_idp_attrib_name is not None:
+			idp = request.META.get(self.shib_idp_attrib_name, None)
 			if not idp:
 				raise ImproperlyConfigured("IdP header missing. Is this path protected by Shib?")
 
-			if SHIB_AUTHORIZED_IDPS is not None and idp not in SHIB_AUTHORIZED_IDPS:
+			if self.shib_authorized_idps is not None and idp not in self.shib_authorized_idps:
 				logger.info("Unauthorized IdP: '%s'", idp)
 				raise PermissionDenied("Unauthorized IdP: {}".format(idp))
 
-		username = request.META.get(SHIB_USERNAME_ATTRIB_NAME, None)
+		username = request.META.get(self.shib_username_attrib_name, None)
 		# If we got None or an empty value, something went wrong.
 		if not username:
 			raise ImproperlyConfigured(
 				"Didn't get a shib username in the field called '{}'... "
-				"Is this path protected by Shib?".format(SHIB_USERNAME_ATTRIB_NAME)
+				"Is this path protected by Shib?".format(self.shib_username_attrib_name)
 				)
 
 		# Make sure we have all required Shibboleth elements before proceeding.
@@ -96,7 +118,7 @@ class ShibAuthCore:
 
 		if len(missing) != 0:
 			raise ShibbolethValidationError(
-				"All required Shibboleth elements not found. Missing: {}".format(missing)
+				"All required Shibboleth elements not found. Missing headers: {}".format(missing)
 			)
 
 		return idp, username, shib_attrs
@@ -135,10 +157,12 @@ class ShibAuthCore:
 		missing = []
 
 		meta = request.META
-		for header, (required, name) in SHIB_ATTRIBUTE_MAP.items():
-			value = shib_attrs[name] = meta.get(header, None)
-			if required and not value:
-				missing.append(name)
+		for header, (required, name) in self.shib_attribute_map.items():
+			if not header in meta:
+				if required:
+					missing.append(header)
+			else:
+				shib_attrs[name] = meta[header]
 
 		return shib_attrs, missing
 
@@ -148,11 +172,11 @@ class ShibAuthCore:
 		"""
 		local_groups = ()
 
-		if idp in SHIB_GROUPS_BY_IDP:
-			local_groups = SHIB_GROUPS_BY_IDP[idp]
+		if idp in self.shib_groups_by_idp:
+			local_groups = self.shib_groups_by_idp[idp]
 
 		remote_groups = set()
-		for attr, attr_config in SHIB_GROUP_ATTRIBUTES.items():
+		for attr, attr_config in self.shib_group_attributes.items():
 			delimiter = attr_config.get('delimiter', ';')
 			mappings = attr_config.get('mappings', None)
 			whitelist = attr_config.get('whitelist', None)
